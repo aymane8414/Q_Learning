@@ -36,9 +36,10 @@ Q_TABLE_FILE = "q_table.pkl"  # fichier pour sauvegarder la table Q
 # fonctions utilitaires
 def draw_track():
     # case finale (zone jaune)
-    pygame.draw.line(screen, RED, (WIDTH // 2, HEIGHT // 2 - 300), (WIDTH // 2, HEIGHT // 2 - 190), 10)
-
+    pygame.draw.line(screen, GREEN, (WIDTH // 2 - 5, HEIGHT // 2 - 300), (WIDTH // 2 - 5, HEIGHT // 2 - 190), 10)  # ligne rouge
+    
     # circuit
+    pygame.draw.line(screen, RED, (WIDTH // 2 + 5, HEIGHT // 2 - 300), (WIDTH // 2 + 5, HEIGHT // 2 - 190), 10)  # ligne verte
     pygame.draw.circle(screen, GREEN, (WIDTH // 2, HEIGHT // 2), 300, 10)  # extérieur
     pygame.draw.circle(screen, GREEN, (WIDTH // 2, HEIGHT // 2), 200)  # intérieure
 
@@ -51,11 +52,10 @@ def draw_text(surface, text, size, color, x, y):
 
 class Car:
     def __init__(self):
-        self.x, self.y = WIDTH // 2, HEIGHT // 2 + 250
-        self.angle = 0
+        self.x, self.y = WIDTH // 2 - 20, HEIGHT // 2 - 250  # position initiale de la voiture
+        self.angle = 180
         self.speed = 2
         self.sensors = [0, 0, 0]
-
 
     def move(self, action):
         if action == 0:
@@ -124,8 +124,10 @@ class Car:
 
 
     def reset(self):
-        self.x, self.y = WIDTH // 2, HEIGHT // 2 + 250
-        self.angle = 0
+        self.x, self.y = WIDTH // 2 - 20, HEIGHT // 2 - 250
+
+        self.angle = 180
+        self.speed = 2
         self.sensors = [0, 0, 0]
 
 
@@ -209,22 +211,23 @@ def main():
         if (
             (car.x - WIDTH // 2) ** 2 + (car.y - HEIGHT // 2) ** 2 >= 300 ** 2
             or (car.x - WIDTH // 2) ** 2 + (car.y - HEIGHT // 2) ** 2 <= 200 ** 2
+            or (WIDTH // 2 + 5 - 5 <= car.x <= WIDTH // 2 + 5 + 5 and HEIGHT // 2 - 300 <= car.y <= HEIGHT // 2 - 190)
         ):
             collision = True
 
-        if collision:
-            reward = -10
+        red_zone = pygame.Rect(WIDTH // 2 - 5, HEIGHT // 2 - 300, 10, 110) 
+
+        if car_rect.colliderect(red_zone):
+            reward = 1000
+            done = True
+            print("case final atteinte")
+        elif collision:
+            reward = -100
             done = True
         else:
             reward = 1
             done = False
 
-
-        yellow_zone = pygame.Rect(100, 100, 50, 100)
-        if car_rect.colliderect(yellow_zone):
-            reward = 100
-            done = True
-            print("case jaune atteinte")
 
         next_state = car.sense()
         agent.update_q_table(state, action, reward, next_state, done)
