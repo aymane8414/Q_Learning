@@ -27,21 +27,42 @@ EPSILON_MIN = 0.01
 
 # discrétisation des états
 STATE = [10, 10, 10]  # nombre de divisions pour les capteurs
-MAX_SENSOR_DISTANCE = 250
+MAX_SENSOR_DISTANCE = 300
 
 ACTIONS = [0, 1, 2]  # gauche, tout droit, droite
 
 Q_TABLE_FILE = "q_table.pkl"  # fichier pour sauvegarder la table Q
+SCORE_FILE = "scores.txt"
+
+SCORE_FILE = "scores.txt"  # fichier pour stocker le meilleur score et les épisodes
+
+def load_scores():
+    if os.path.exists(SCORE_FILE):
+        with open(SCORE_FILE, "r") as f:
+            lines = f.readlines()
+            best_score = int(lines[0].strip())
+            episode = int(lines[1].strip())
+            print(f"Scores chargés : Meilleur score = {best_score}, Épisode = {episode}")
+            return best_score, episode
+    print("Fichier scores.txt introuvable. Initialisation des scores à zéro.")
+    return 0, 0
+
+def save_scores(best_score, episode):
+    with open(SCORE_FILE, "w") as f:
+        f.write(f"{best_score}\n")
+        f.write(f"{episode}\n")
+    print(f"Scores sauvegardés : Meilleur score = {best_score}, Épisode = {episode}")
+
 
 # fonctions utilitaires
 def draw_track():
     # case finale (zone jaune)
-    pygame.draw.line(screen, GREEN, (WIDTH // 2 - 5, HEIGHT // 2 - 300), (WIDTH // 2 - 5, HEIGHT // 2 - 190), 10)  # ligne rouge
+    pygame.draw.line(screen, BLACK, (WIDTH // 2 - 5, HEIGHT // 2 - 300), (WIDTH // 2 - 5, HEIGHT // 2 - 190), 10)  # ligne rouge
     
     # circuit
-    pygame.draw.line(screen, RED, (WIDTH // 2 + 5, HEIGHT // 2 - 300), (WIDTH // 2 + 5, HEIGHT // 2 - 190), 10)  # ligne verte
-    pygame.draw.circle(screen, GREEN, (WIDTH // 2, HEIGHT // 2), 300, 10)  # extérieur
-    pygame.draw.circle(screen, GREEN, (WIDTH // 2, HEIGHT // 2), 200)  # intérieure
+    pygame.draw.line(screen, GREEN, (WIDTH // 2 + 5, HEIGHT // 2 - 300), (WIDTH // 2 + 5, HEIGHT // 2 - 190), 10)  # ligne verte
+    pygame.draw.circle(screen, BLACK, (WIDTH // 2, HEIGHT // 2), 300, 10)  # extérieur
+    pygame.draw.circle(screen, BLACK, (WIDTH // 2, HEIGHT // 2), 200)  # intérieure
 
 
 def draw_text(surface, text, size, color, x, y):
@@ -190,9 +211,15 @@ def main():
     car = Car()
     agent = QLearningAgent()
 
-    episode = 1
+    if not os.path.exists(Q_TABLE_FILE):
+        print("Q-table introuvable. Réinitialisation des scores.")
+        save_scores(0, 0)  # reinitialiser les scores à zéro
+        best_score, episode = 0, 0
+    else:
+        # charger les scores et le nombre d'épisodes
+        best_score, episode = load_scores()
+
     score = 0
-    best_score = 0
 
     running = True
     while running:
@@ -205,7 +232,7 @@ def main():
         action = agent.choose_action(state)
         car.move(action)
 
-        # detection de collision 
+        # detection de collision
         collision = False
         car_rect = pygame.Rect(car.x - 15, car.y - 15, 30, 30)
         if (
@@ -215,12 +242,12 @@ def main():
         ):
             collision = True
 
-        red_zone = pygame.Rect(WIDTH // 2 - 5, HEIGHT // 2 - 300, 10, 110) 
+        green_zone = pygame.Rect(WIDTH // 2 - 5, HEIGHT // 2 - 300, 10, 110)
 
-        if car_rect.colliderect(red_zone):
+        if car_rect.colliderect(green_zone):
             reward = 1000
             done = True
-            print("case final atteinte")
+            print("Case finale atteinte")
         elif collision:
             reward = -100
             done = True
@@ -228,23 +255,29 @@ def main():
             reward = 1
             done = False
 
-
         next_state = car.sense()
         agent.update_q_table(state, action, reward, next_state, done)
 
         score += reward
 
         if done:
+            # mettre à jour le meilleur score si nécessaire
             if score > best_score:
                 best_score = score
+                print(f"Nouveau meilleur score : {best_score}")
+
             car.reset()
-            print(f"\u00c9pisode {episode} termin\u00e9 avec un score de {score}. Meilleur score: {best_score}")
+            print(f"Épisode {episode} terminé avec un score de {score}. Meilleur score: {best_score}")
             episode += 1
             score = 0
 
+            # sauvegarder les scores et le nombre d'épisodes
+            save_scores(best_score, episode)
+
+            # reduire EPSILON pour l'exploration
             EPSILON = max(EPSILON_MIN, EPSILON * EPSILON_DECAY)
 
-        draw_text(screen, f"\u00c9pisode: {episode}", 24, BLACK, 10, HEIGHT - 100)
+        draw_text(screen, f"Épisode: {episode}", 24, BLACK, 10, HEIGHT - 100)
         draw_text(screen, f"Score: {score}", 24, BLACK, 10, HEIGHT - 80)
         draw_text(screen, f"Meilleur score: {best_score}", 24, BLACK, 10, HEIGHT - 60)
         draw_text(screen, f"Epsilon: {EPSILON:.2f}", 24, BLACK, 10, HEIGHT - 40)
