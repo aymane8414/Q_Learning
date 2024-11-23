@@ -249,10 +249,17 @@ def main():
             done = True
             print("Case finale atteinte")
         elif collision:
-            reward = -100
+            reward = -500
+            pygame.draw.circle(screen, RED, (50, 50), 10), screen.blit(pygame.font.Font(None, 24).render(f"{reward}", True, BLACK), (65, 45))
             done = True
         else:
-            reward = 1
+            reward = 10
+            done = False
+        
+        # pénaliser si un capteur gauche ou droit est plus grand que le milieu
+        if car.sensors[0] > car.sensors[1] or car.sensors[2] > car.sensors[1]:
+            reward = -10
+            pygame.draw.circle(screen, RED, (50, 50), 10), screen.blit(pygame.font.Font(None, 24).render(f"{reward}", True, BLACK), (65, 45))
             done = False
 
         next_state = car.sense()
