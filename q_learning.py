@@ -29,28 +29,19 @@ EPSILON_MIN = 0.01
 STATE = [10, 10, 10]  # nombre de divisions pour les capteurs
 MAX_SENSOR_DISTANCE = 250
 
-# Actions
 ACTIONS = [0, 1, 2]  # gauche, tout droit, droite
 
-Q_TABLE_FILE = "q_table.pkl"  # Nom du fichier pour sauvegarder la table Q
+Q_TABLE_FILE = "q_table.pkl"  # fichier pour sauvegarder la table Q
 
-# Fonctions utilitaires
+# fonctions utilitaires
 def draw_track():
-    # Nouvelle map avec le chemin en spirale
-    pygame.draw.line(screen, GREEN, (100, 100), (700, 100), 10)
-    pygame.draw.line(screen, GREEN, (700, 100), (700, 700), 10)
-    pygame.draw.line(screen, GREEN, (700, 700), (100, 700), 10)
-    pygame.draw.line(screen, GREEN, (100, 700), (100, 200), 10)
-    pygame.draw.line(screen, GREEN, (400, 600), (400, 300), 10) #test
-    pygame.draw.line(screen, GREEN, (100, 200), (600, 200), 10)
-    pygame.draw.line(screen, GREEN, (600, 200), (600, 600), 10)
-    pygame.draw.line(screen, GREEN, (600, 600), (200, 600), 10)
-    pygame.draw.line(screen, GREEN, (200, 600), (200, 300), 10)
-    pygame.draw.line(screen, GREEN, (200, 300), (500, 300), 10)
-    pygame.draw.line(screen, GREEN, (500, 300), (500, 500), 10)
+    # case finale (zone jaune)
+    pygame.draw.line(screen, RED, (WIDTH // 2, HEIGHT // 2 - 300), (WIDTH // 2, HEIGHT // 2 - 190), 10)
 
-    # case final
-    pygame.draw.rect(screen, (255, 255, 0), (100, 100, 50, 100))
+    # circuit
+    pygame.draw.circle(screen, GREEN, (WIDTH // 2, HEIGHT // 2), 300, 10)  # extérieur
+    pygame.draw.circle(screen, GREEN, (WIDTH // 2, HEIGHT // 2), 200)  # intérieure
+
 
 def draw_text(surface, text, size, color, x, y):
     font = pygame.font.Font(None, size)
@@ -60,10 +51,11 @@ def draw_text(surface, text, size, color, x, y):
 
 class Car:
     def __init__(self):
-        self.x, self.y = WIDTH // 2, HEIGHT // 2
+        self.x, self.y = WIDTH // 2, HEIGHT // 2 + 250
         self.angle = 0
         self.speed = 2
         self.sensors = [0, 0, 0]
+
 
     def move(self, action):
         if action == 0:
@@ -98,7 +90,7 @@ class Car:
 
             pygame.draw.circle(screen, color, (WIDTH - 50, y_offset), 10)
 
-            # Afficher la distance à côté du cercle
+            # afficher la distance à côté du cercle
             font = pygame.font.Font(None, 16)
             text_surface = font.render(distance_text, True, BLACK)
             screen.blit(text_surface, (WIDTH - 80, y_offset - 10))
@@ -117,8 +109,13 @@ class Car:
                     self.sensors[i] = d / max_distance
                     break
 
-        
-                if screen.get_at((x, y))[:3] == GREEN:  
+                if (
+                    (WIDTH // 2 - 300 <= x <= WIDTH // 2 + 300 and HEIGHT // 2 - 300 <= y <= HEIGHT // 2 + 300)
+                    and ((x - WIDTH // 2) ** 2 + (y - HEIGHT // 2) ** 2 >= 300 ** 2)
+                ) or (
+                    (WIDTH // 2 - 200 <= x <= WIDTH // 2 + 200 and HEIGHT // 2 - 200 <= y <= HEIGHT // 2 + 200)
+                    and ((x - WIDTH // 2) ** 2 + (y - HEIGHT // 2) ** 2 <= 200 ** 2)
+                ):
                     self.sensors[i] = d / max_distance
                     break
             else:
@@ -127,26 +124,39 @@ class Car:
 
 
     def reset(self):
-        self.x, self.y = WIDTH // 2, HEIGHT // 2
+        self.x, self.y = WIDTH // 2, HEIGHT // 2 + 250
         self.angle = 0
         self.sensors = [0, 0, 0]
+
 
 class QLearningAgent:
     def __init__(self):
         self.q_table = self.load_q_table()
 
     def discretize_state(self, state):
+        """
+        Transforme les distances des capteurs en catégories
+        """
         bins = [np.linspace(0, 1, num=b) for b in STATE]
         discrete_state = tuple(np.digitize(s, bins[i]) - 1 for i, s in enumerate(state))
         return discrete_state
 
     def choose_action(self, state):
+        """
+        Choisit une action pour la voiture :
+        - Exploration : avec une probabilité < EPSILON, l'agent essaie une action au hasard
+        - Exploitation : sinon, il utilise la table Q pour choisir l'action
+        """
         if random.random() < EPSILON:
             return random.choice(ACTIONS)
         discrete_state = self.discretize_state(state)
         return np.argmax(self.q_table[discrete_state])
 
     def update_q_table(self, state, action, reward, next_state, done):
+        """
+        Met à jour la table Q en fonction de l'expérience actuelle
+        - L'objectif est d'apprendre combien l'action effectuée était "bonne"
+        """
         discrete_state = self.discretize_state(state)
         discrete_next_state = self.discretize_state(next_state)
 
@@ -157,6 +167,8 @@ class QLearningAgent:
         self.q_table[discrete_state][action] += ALPHA * (target - q_value)
 
         self.save_q_table()
+
+
 
     def load_q_table(self):
         if os.path.exists(Q_TABLE_FILE):
@@ -194,23 +206,19 @@ def main():
         # detection de collision 
         collision = False
         car_rect = pygame.Rect(car.x - 15, car.y - 15, 30, 30)
-        for x in range(car_rect.left, car_rect.right):
-            for y in range(car_rect.top, car_rect.bottom):
-                if 0 <= x < WIDTH and 0 <= y < HEIGHT: 
-                    if screen.get_at((x, y))[:3] == GREEN:
-                        collision = True
-                        break
-            if collision:
-                break
-
         if (
-            car.x < 0 or car.x >= WIDTH or car.y < 0 or car.y >= HEIGHT or collision
+            (car.x - WIDTH // 2) ** 2 + (car.y - HEIGHT // 2) ** 2 >= 300 ** 2
+            or (car.x - WIDTH // 2) ** 2 + (car.y - HEIGHT // 2) ** 2 <= 200 ** 2
         ):
+            collision = True
+
+        if collision:
             reward = -10
             done = True
         else:
             reward = 1
             done = False
+
 
         yellow_zone = pygame.Rect(100, 100, 50, 100)
         if car_rect.colliderect(yellow_zone):
