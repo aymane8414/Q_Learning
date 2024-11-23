@@ -26,8 +26,8 @@ EPSILON_DECAY = 0.99
 EPSILON_MIN = 0.01
 
 # discrétisation des états
-STATE = [10, 10, 10]  # nombre de divisions pour les capteurs
-MAX_SENSOR_DISTANCE = 300
+STATE = [20, 20, 20]  # nombre de divisions pour les capteurs
+MAX_SENSOR_DISTANCE = 400
 
 ACTIONS = [0, 1, 2]  # gauche, tout droit, droite
 
@@ -35,6 +35,9 @@ Q_TABLE_FILE = "q_table.pkl"  # fichier pour sauvegarder la table Q
 SCORE_FILE = "scores.txt"
 
 SCORE_FILE = "scores.txt"  # fichier pour stocker le meilleur score et les épisodes
+
+import pandas as pd
+
 
 def load_scores():
     if os.path.exists(SCORE_FILE):
@@ -87,6 +90,14 @@ class Car:
         radian_angle = np.radians(self.angle)
         self.x += int(self.speed * np.cos(radian_angle))
         self.y -= int(self.speed * np.sin(radian_angle))
+
+    def update_speed(self, epsilon):
+        """
+        Ajuste la vitesse en fonction de epsilon.
+        - lorsque epsilon = 0.99 -> vitesse = 1
+        - lorsque epsilon = 0.01 -> vitesse = 3
+        """
+        self.speed =  2 + (1 - epsilon) * (5 - 2)
 
     def draw(self):
         car_rect = pygame.Rect(self.x - 15, self.y - 15, 30, 30)
@@ -204,6 +215,30 @@ class QLearningAgent:
     def save_q_table(self):
         with open(Q_TABLE_FILE, "wb") as f:
             pickle.dump(self.q_table, f)
+        self.save_q_table_readable()
+
+    def save_q_table_readable(self, filename="q_table_readable.csv"):
+        """
+        Sauvegarde la Q-table dans un format lisible (CSV) pour analyse.
+        """
+        flat_q_table = []
+        
+        # Parcourir la Q-table
+        it = np.nditer(self.q_table, flags=['multi_index'], op_flags=['readwrite'])
+        for q_value in it:
+            state = it.multi_index[:-1]  # Indices des états
+            action_index = it.multi_index[-1]  # Dernier index correspond à l'action
+            flat_q_table.append((*state, action_index, q_value.item()))
+        
+        # Définir les noms des colonnes
+        state_columns = [f"State_Dim_{i}" for i in range(len(STATE))]
+        columns = state_columns + ["Action", "Q_Value"]
+
+        # Convertir en DataFrame et sauvegarder
+        df = pd.DataFrame(flat_q_table, columns=columns)
+        df.to_csv(filename, index=False)
+
+
 
 def main():
     global EPSILON
@@ -223,6 +258,9 @@ def main():
 
     running = True
     while running:
+        car.update_speed(EPSILON)
+
+
         screen.fill(WHITE)
         draw_track()
         car.draw()
@@ -232,6 +270,7 @@ def main():
         action = agent.choose_action(state)
         car.move(action)
 
+        draw_text(screen, f"Vitesse: {car.speed:.2f}", 24, BLACK, 10, HEIGHT - 20)
         # detection de collision
         collision = False
         car_rect = pygame.Rect(car.x - 15, car.y - 15, 30, 30)
@@ -258,7 +297,7 @@ def main():
         
         # pénaliser si un capteur gauche ou droit est plus grand que le milieu
         if car.sensors[0] > car.sensors[1] or car.sensors[2] > car.sensors[1]:
-            reward = -10
+            reward = -1
             pygame.draw.circle(screen, RED, (50, 50), 10), screen.blit(pygame.font.Font(None, 24).render(f"{reward}", True, BLACK), (65, 45))
             done = False
 
@@ -271,10 +310,8 @@ def main():
             # mettre à jour le meilleur score si nécessaire
             if score > best_score:
                 best_score = score
-                print(f"Nouveau meilleur score : {best_score}")
 
             car.reset()
-            print(f"Épisode {episode} terminé avec un score de {score}. Meilleur score: {best_score}")
             episode += 1
             score = 0
 
