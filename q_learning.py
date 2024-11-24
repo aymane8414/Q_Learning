@@ -3,6 +3,8 @@ import numpy as np
 import random
 import os
 import pickle
+import subprocess
+import pandas as pd
 
 pygame.init()
 
@@ -23,7 +25,7 @@ ALPHA = 0.1  # taux d'apprentissage
 GAMMA = 0.99  # facteur de récompense future
 EPSILON = 0.99  # exploration initiale
 EPSILON_DECAY = 0.99
-EPSILON_MIN = 0.01
+EPSILON_MIN = 0.1
 
 # discrétisation des états
 STATE = [20, 20, 20]  # nombre de divisions pour les capteurs
@@ -36,8 +38,19 @@ SCORE_FILE = "scores.txt"
 
 SCORE_FILE = "scores.txt"  # fichier pour stocker le meilleur score et les épisodes
 
-import pandas as pd
 
+def git_push_on_new_best_score():
+    """
+    sauvegarder a chaque meilleur score
+    """
+    try:
+        subprocess.run(["git", "add", "scores.txt", "q_table.pkl"], check=True)
+        subprocess.run(["git", "commit", "-m", "Mise à jour"], check=True)
+        subprocess.run(["git", "push", "origin", "main"], check=True)
+
+        print("Meilleur score détecté : Les changements ont été poussés vers le dépôt Git.")
+    except subprocess.CalledProcessError as e:
+        print(f"Erreur lors du push Git : {e}")
 
 def load_scores():
     if os.path.exists(SCORE_FILE):
@@ -54,7 +67,6 @@ def save_scores(best_score, episode):
     with open(SCORE_FILE, "w") as f:
         f.write(f"{best_score}\n")
         f.write(f"{episode}\n")
-    print(f"Scores sauvegardés : Meilleur score = {best_score}, Épisode = {episode}")
 
 
 # fonctions utilitaires
@@ -91,13 +103,6 @@ class Car:
         self.x += int(self.speed * np.cos(radian_angle))
         self.y -= int(self.speed * np.sin(radian_angle))
 
-    def update_speed(self, epsilon):
-        """
-        Ajuste la vitesse en fonction de epsilon.
-        - lorsque epsilon = 0.99 -> vitesse = 1
-        - lorsque epsilon = 0.01 -> vitesse = 3
-        """
-        self.speed =  2 + (1 - epsilon) * (5 - 2)
 
     def draw(self):
         car_rect = pygame.Rect(self.x - 15, self.y - 15, 30, 30)
@@ -258,8 +263,6 @@ def main():
 
     running = True
     while running:
-        car.update_speed(EPSILON)
-
 
         screen.fill(WHITE)
         draw_track()
@@ -270,7 +273,7 @@ def main():
         action = agent.choose_action(state)
         car.move(action)
 
-        draw_text(screen, f"Vitesse: {car.speed:.2f}", 24, BLACK, 10, HEIGHT - 20)
+        draw_text(screen, f"Vitesse: {car.speed*60:.2f} pps", 24, BLACK, 10, HEIGHT - 20)
         # detection de collision
         collision = False
         car_rect = pygame.Rect(car.x - 15, car.y - 15, 30, 30)
@@ -310,6 +313,7 @@ def main():
             # mettre à jour le meilleur score si nécessaire
             if score > best_score:
                 best_score = score
+                git_push_on_new_best_score()
 
             car.reset()
             episode += 1
