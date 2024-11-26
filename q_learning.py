@@ -21,36 +21,21 @@ screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Q Learning car simulation")
 
 # parametres
-ALPHA = 0.1  # taux d'apprentissage
+ALPHA = 0.01  # taux d'apprentissage
 GAMMA = 0.99  # facteur de récompense future
-EPSILON = 0.99  # exploration initiale
-EPSILON_DECAY = 0.99
-EPSILON_MIN = 0.1
+EPSILON = 1.0  # exploration initiale
+EPSILON_DECAY = 0.995
+EPSILON_MIN = 0.70
 
 # discrétisation des états
-STATE = [20, 20, 20]  # nombre de divisions pour les capteurs
-MAX_SENSOR_DISTANCE = 400
+STATE = [10, 10, 10]  # nombre de divisions pour les capteurs
+MAX_SENSOR_DISTANCE = 100
 
 ACTIONS = [0, 1, 2]  # gauche, tout droit, droite
 
 Q_TABLE_FILE = "q_table.pkl"  # fichier pour sauvegarder la table Q
 SCORE_FILE = "scores.txt"
 
-SCORE_FILE = "scores.txt"  # fichier pour stocker le meilleur score et les épisodes
-
-
-def git_push_on_new_best_score():
-    """
-    sauvegarder a chaque meilleur score
-    """
-    try:
-        subprocess.run(["git", "add", "scores.txt", "q_table.pkl"], check=True)
-        subprocess.run(["git", "commit", "-m", "Mise à jour"], check=True)
-        subprocess.run(["git", "push", "origin", "main"], check=True)
-
-        print("Meilleur score détecté : Les changements ont été poussés vers le dépôt Git.")
-    except subprocess.CalledProcessError as e:
-        print(f"Erreur lors du push Git : {e}")
 
 def load_scores():
     if os.path.exists(SCORE_FILE):
@@ -75,7 +60,7 @@ def draw_track():
     pygame.draw.line(screen, BLACK, (WIDTH // 2 - 5, HEIGHT // 2 - 300), (WIDTH // 2 - 5, HEIGHT // 2 - 190), 10)  # ligne rouge
     
     # circuit
-    pygame.draw.line(screen, GREEN, (WIDTH // 2 + 5, HEIGHT // 2 - 300), (WIDTH // 2 + 5, HEIGHT // 2 - 190), 10)  # ligne verte
+    pygame.draw.line(screen, GREEN, (WIDTH // 2 + 5, HEIGHT // 2 - 300), (WIDTH // 2 + 5, HEIGHT // 2 - 190), 10)  # ligne noir
     pygame.draw.circle(screen, BLACK, (WIDTH // 2, HEIGHT // 2), 300, 10)  # extérieur
     pygame.draw.circle(screen, BLACK, (WIDTH // 2, HEIGHT // 2), 200)  # intérieure
 
@@ -88,9 +73,9 @@ def draw_text(surface, text, size, color, x, y):
 
 class Car:
     def __init__(self):
-        self.x, self.y = WIDTH // 2 - 20, HEIGHT // 2 - 250  # position initiale de la voiture
-        self.angle = 180
-        self.speed = 2
+        self.x, self.y = WIDTH // 2 - 25, HEIGHT // 2 - 250  # position initiale de la voiture
+        self.angle = 200
+        self.speed = 1.5
         self.sensors = [0, 0, 0]
 
     def move(self, action):
@@ -161,10 +146,10 @@ class Car:
 
 
     def reset(self):
-        self.x, self.y = WIDTH // 2 - 20, HEIGHT // 2 - 250
+        self.x, self.y = WIDTH // 2 - 25, HEIGHT // 2 - 250
 
-        self.angle = 180
-        self.speed = 2
+        self.angle = 200
+        self.speed = 1.5
         self.sensors = [0, 0, 0]
 
 
@@ -263,7 +248,7 @@ def main():
 
     running = True
     while running:
-
+        
         screen.fill(WHITE)
         draw_track()
         car.draw()
@@ -277,21 +262,29 @@ def main():
         # detection de collision
         collision = False
         car_rect = pygame.Rect(car.x - 15, car.y - 15, 30, 30)
+        ligne_noire_rect = pygame.Rect(WIDTH // 2 - 10, HEIGHT // 2 - 300, 10, 110)
         if (
             (car.x - WIDTH // 2) ** 2 + (car.y - HEIGHT // 2) ** 2 >= 300 ** 2
             or (car.x - WIDTH // 2) ** 2 + (car.y - HEIGHT // 2) ** 2 <= 200 ** 2
             or (WIDTH // 2 + 5 - 5 <= car.x <= WIDTH // 2 + 5 + 5 and HEIGHT // 2 - 300 <= car.y <= HEIGHT // 2 - 190)
+            or car_rect.colliderect(ligne_noire_rect)
+            
         ):
             collision = True
 
-        green_zone = pygame.Rect(WIDTH // 2 - 5, HEIGHT // 2 - 300, 10, 110)
+        green_zone = pygame.Rect(WIDTH // 2 + 2, HEIGHT // 2 - 300, 10, 110)
+        pygame.draw.rect(screen, (255, 255, 0), green_zone, 3)  # Dessine la case finale en jaune
+
+        black_zone = pygame.Rect(WIDTH // 2 - 10, HEIGHT // 2 - 300, 10, 110)
+        pygame.draw.rect(screen, BLUE, black_zone, 3)  # Dessine la case finale en jaune
+
 
         if car_rect.colliderect(green_zone):
-            reward = 1000
+            reward = 10000
             done = True
             print("Case finale atteinte")
         elif collision:
-            reward = -500
+            reward = - 1000
             pygame.draw.circle(screen, RED, (50, 50), 10), screen.blit(pygame.font.Font(None, 24).render(f"{reward}", True, BLACK), (65, 45))
             done = True
         else:
@@ -300,9 +293,9 @@ def main():
         
         # pénaliser si un capteur gauche ou droit est plus grand que le milieu
         if car.sensors[0] > car.sensors[1] or car.sensors[2] > car.sensors[1]:
-            reward = -1
+            reward = -score
             pygame.draw.circle(screen, RED, (50, 50), 10), screen.blit(pygame.font.Font(None, 24).render(f"{reward}", True, BLACK), (65, 45))
-            done = False
+            done = True
 
         next_state = car.sense()
         agent.update_q_table(state, action, reward, next_state, done)
@@ -313,7 +306,6 @@ def main():
             # mettre à jour le meilleur score si nécessaire
             if score > best_score:
                 best_score = score
-                git_push_on_new_best_score()
 
             car.reset()
             episode += 1
